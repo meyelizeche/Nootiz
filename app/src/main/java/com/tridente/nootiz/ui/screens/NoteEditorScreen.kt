@@ -518,7 +518,7 @@ fun NoteEditorScreen(
     suspend fun saveNoteInternal(silent: Boolean = false): Note? {
         if (!canEdit) return currentNote
         val serializedBody = currentMarkdownBody()
-        val effectiveTitle = title.trim().ifEmpty { "Ideas para el proyecto" }
+        val effectiveTitle = title.trim()
         isSaving = true
         errorMessage = null
         val existing = currentNote
@@ -739,7 +739,7 @@ fun NoteEditorScreen(
                     }
                 }
 
-                // Bottom Formatting Bar: Título, Subtítulo, Texto, Task Check Icon, IMG
+                // Bottom Formatting Bar: T\u00edtulo, Subt\u00edtulo, Texto, Task Check Icon, IMG
                 Surface(
                     color = PureWhite,
                     shape = RoundedCornerShape(22.dp),
@@ -756,17 +756,17 @@ fun NoteEditorScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Título button
+                        // T\u00edtulo button
                         EditorToolPill(
-                            text = "Título",
+                            text = "T\u00edtulo",
                             active = activeBlockType == TextBlockType.TITULO,
                             enabled = canEdit,
                             onClick = { applyBlockType(TextBlockType.TITULO) }
                         )
 
-                        // Subtítulo button
+                        // Subt\u00edtulo button
                         EditorToolPill(
-                            text = "Subtítulo",
+                            text = "Subt\u00edtulo",
                             active = activeBlockType == TextBlockType.SUBTITULO,
                             enabled = canEdit,
                             onClick = { applyBlockType(TextBlockType.SUBTITULO) }
@@ -791,7 +791,7 @@ fun NoteEditorScreen(
                         ) {
                             Icon(
                                 painter = painterResource(id = R.drawable.ic_task_check),
-                                contentDescription = "Alternar casilla de verificación en el texto",
+                                contentDescription = "Alternar casilla de verificaci\u00f3n en el texto",
                                 tint = if (activeHasCheckbox) PureWhite else RoyalBlue,
                                 modifier = Modifier.size(20.dp)
                             )
@@ -998,7 +998,7 @@ fun NoteEditorScreen(
                 Box(modifier = Modifier.weight(1f)) {
                     if (title.isEmpty()) {
                         Text(
-                            text = "Ideas para el lunes",
+                            text = "T\u00edtulo",
                             style = MaterialTheme.typography.headlineMedium,
                             color = TextSecondarySlate.copy(alpha = 0.45f)
                         )
@@ -1220,8 +1220,9 @@ fun NoteEditorScreen(
                         )
                     }
 
-                    // Keep TextFieldValue synced when block.text changes externally (e.g. merging or loading)
-                    if (textFieldValue.text != displayText) {
+                    // Keep TextFieldValue synced only when block.text changes externally (e.g. merging or loading), preserving IME composition
+                    val currentCleanText = textFieldValue.text.removePrefix(sentinel).replace(sentinel, "")
+                    if (currentCleanText != block.text) {
                         val prefixLen = displayPrefix.length
                         val clampedStart = textFieldValue.selection.start.coerceIn(prefixLen, displayText.length)
                         val clampedEnd = textFieldValue.selection.end.coerceIn(prefixLen, displayText.length)
@@ -1230,7 +1231,6 @@ fun NoteEditorScreen(
                             selection = TextRange(clampedStart, clampedEnd)
                         )
                     }
-
                     LaunchedEffect(pendingFocusBlockId, block.id) {
                         if (pendingFocusBlockId == block.id) {
                             val prefixLen = if (index > 0) 1 else 0
@@ -1326,7 +1326,7 @@ fun NoteEditorScreen(
                         Box(modifier = Modifier.weight(1f)) {
                             if (index == 0 && isWholeBodyEmpty) {
                                 Text(
-                                    text = "Una semana con menos ruido y mÃ¡s foco.\nEmpezar por lo importante, dejar espacio para lo inesperado.",
+                                    text = "Una semana con menos ruido y m\u00e1s foco.\nEmpezar por lo importante, dejar espacio para lo inesperado.",
                                     style = baseStyle.copy(
                                         color = TextSecondarySlate.copy(alpha = 0.45f)
                                     )
@@ -1374,10 +1374,11 @@ fun NoteEditorScreen(
                                         val rebuilt = displayPrefix + cleanNewText
                                         val selStart = newValue.selection.start.coerceIn(prefixLen, rebuilt.length)
                                         val selEnd = newValue.selection.end.coerceIn(prefixLen, rebuilt.length)
-                                        textFieldValue = TextFieldValue(
-                                            text = rebuilt,
-                                            selection = TextRange(selStart, selEnd)
-                                        )
+                                        textFieldValue = if (newValue.text == rebuilt) {
+                                            newValue.copy(selection = TextRange(selStart, selEnd))
+                                        } else {
+                                            newValue.copy(text = rebuilt, selection = TextRange(selStart, selEnd))
+                                        }
                                     }
                                 },
                                 readOnly = !canEdit,
@@ -1418,7 +1419,7 @@ fun NoteEditorScreen(
             if (attachments.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(20.dp))
                 Text(
-                    text = "Imágenes adjuntas (${attachments.size})",
+                    text = "Im\u00e1genes adjuntas (${attachments.size})",
                     style = MaterialTheme.typography.titleMedium,
                     color = TextPrimaryNavy
                 )
@@ -1461,7 +1462,7 @@ fun NoteEditorScreen(
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
-                                            text = "${att.contentType} · ${att.sizeBytes / 1024} KB",
+                                            text = "${att.contentType} \u2022 ${att.sizeBytes / 1024} KB",
                                             fontSize = 11.sp,
                                             color = TextSecondarySlate
                                         )
@@ -1506,7 +1507,7 @@ fun NoteEditorScreen(
                 OutlinedTextField(
                     value = newTagInput,
                     onValueChange = { newTagInput = it },
-                    placeholder = { Text("Ej. rust, diseÃ±o, ideas") },
+                    placeholder = { Text("Ej. rust, dise\u00f1o, ideas") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1527,7 +1528,7 @@ fun NoteEditorScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = RoyalBlue)
                 ) {
-                    Text("AÃ±adir", color = PureWhite)
+                    Text("A\u00f1adir", color = PureWhite)
                 }
             },
             dismissButton = {
@@ -1591,7 +1592,7 @@ fun NoteEditorScreen(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = title.ifBlank { "Ideas para el lunes" },
+                        text = title.ifBlank { "Sin t\u00edtulo" },
                         color = TextPrimaryNavy,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp,

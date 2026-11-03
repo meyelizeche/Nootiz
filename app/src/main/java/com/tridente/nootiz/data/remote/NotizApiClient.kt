@@ -169,7 +169,7 @@ class NotizApiClient(private val sessionPrefs: SessionPreferences) {
         folderId: String? = null
     ): Result<Note> {
         val payload = JSONObject().apply {
-            put("title", title.trim().ifEmpty { "Sin título" })
+            put("title", title.trim().ifEmpty { "\u200B" })
             put("body", body)
             val tagsArr = JSONArray()
             tags.forEach { t ->
@@ -196,7 +196,7 @@ class NotizApiClient(private val sessionPrefs: SessionPreferences) {
         folderId: String? = null
     ): Result<Note> {
         val payload = JSONObject().apply {
-            if (title != null) put("title", title.trim().ifEmpty { "Sin título" })
+            if (title != null) put("title", title.trim().ifEmpty { "\u200B" })
             if (body != null) put("body", body)
             if (tags != null) {
                 val tagsArr = JSONArray()
@@ -271,6 +271,7 @@ class NotizApiClient(private val sessionPrefs: SessionPreferences) {
             val boundary = "----NootizBoundary" + UUID.randomUUID().toString().replace("-", "")
             val lineEnd = "\r\n"
             val twoHyphens = "--"
+            val safeFilename = filename.replace("\"", "_")
 
             val conn = (resolveUrl("/api/notes/$noteId/attachments").openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -286,13 +287,17 @@ class NotizApiClient(private val sessionPrefs: SessionPreferences) {
 
             try {
                 DataOutputStream(conn.outputStream).use { dos ->
-                    dos.writeBytes(twoHyphens + boundary + lineEnd)
-                    dos.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"$filename\"$lineEnd")
-                    dos.writeBytes("Content-Type: $contentType$lineEnd")
-                    dos.writeBytes(lineEnd)
+                    val headerText = buildString {
+                        append(twoHyphens).append(boundary).append(lineEnd)
+                        append("Content-Disposition: form-data; name=\"file\"; filename=\"").append(safeFilename).append("\"").append(lineEnd)
+                        append("Content-Type: ").append(contentType).append(lineEnd)
+                        append(lineEnd)
+                    }
+                    val footerText = "$lineEnd$twoHyphens$boundary$twoHyphens$lineEnd"
+
+                    dos.write(headerText.toByteArray(Charsets.UTF_8))
                     dos.write(bytes)
-                    dos.writeBytes(lineEnd)
-                    dos.writeBytes(twoHyphens + boundary + twoHyphens + lineEnd)
+                    dos.write(footerText.toByteArray(Charsets.UTF_8))
                     dos.flush()
                 }
 
@@ -410,21 +415,49 @@ class NotizApiClient(private val sessionPrefs: SessionPreferences) {
         return buffer.toString("UTF-8")
     }
 
+    private fun repairMojibake(text: String): String {
+        if (text.isEmpty() || (!text.contains('\u00c3') && !text.contains('\u00c2'))) {
+            return text
+        }
+        return text
+            .replace("\u00c3\u00b1", "\u00f1") // \u00c3\u00b1 -> \u00f1
+            .replace("\u00c3\u0091", "\u00d1") // \u00c3\u0091 -> \u00d1
+            .replace("\u00c3\u2018", "\u00d1") // \u00c3\u2018 -> \u00d1
+            .replace("\u00c3\u00a1", "\u00e1") // \u00c3\u00a1 -> \u00e1
+            .replace("\u00c3\u00a9", "\u00e9") // \u00c3\u00a9 -> \u00e9
+            .replace("\u00c3\u00ad", "\u00ed") // \u00c3\u00ad -> \u00ed
+            .replace("\u00c3\u00b3", "\u00f3") // \u00c3\u00b3 -> \u00f3
+            .replace("\u00c3\u00ba", "\u00fa") // \u00c3\u00ba -> \u00fa
+            .replace("\u00c3\u00bc", "\u00fc") // \u00c3\u00bc -> \u00fc
+            .replace("\u00c3\u0081", "\u00c1") // \u00c3\u0081 -> \u00c1
+            .replace("\u00c3\u0089", "\u00c9") // \u00c3\u0089 -> \u00c9
+            .replace("\u00c3\u2030", "\u00c9") // \u00c3\u2030 -> \u00c9
+            .replace("\u00c3\u008d", "\u00cd") // \u00c3\u008d -> \u00cd
+            .replace("\u00c3\u0093", "\u00d3") // \u00c3\u0093 -> \u00d3
+            .replace("\u00c3\u201c", "\u00d3") // \u00c3\u201c -> \u00d3
+            .replace("\u00c3\u009a", "\u00da") // \u00c3\u009a -> \u00da
+            .replace("\u00c3\u0161", "\u00da") // \u00c3\u0161 -> \u00da
+            .replace("\u00c3\u009c", "\u00dc") // \u00c3\u009c -> \u00dc
+            .replace("\u00c3\u0153", "\u00dc") // \u00c3\u0153 -> \u00dc
+            .replace("\u00c2\u00bf", "\u00bf") // \u00c2\u00bf -> \u00bf
+            .replace("\u00c2\u00a1", "\u00a1") // \u00c2\u00a1 -> \u00a1
+    }
+
     private fun parseApiError(code: Int, errorStream: InputStream?): ApiException {
         val raw = readStream(errorStream)
         val message = try {
             val json = JSONObject(raw)
-            json.optString("error").ifBlank { defaultStatusMessage(code) }
+            repairMojibake(json.optString("error")).ifBlank { defaultStatusMessage(code) }
         } catch (_: Exception) {
-            raw.ifBlank { defaultStatusMessage(code) }
+            repairMojibake(raw).ifBlank { defaultStatusMessage(code) }
         }
         return ApiException(code, message)
     }
 
     private fun defaultStatusMessage(code: Int): String = when (code) {
-        400 -> "Solicitud inválida (400)"
-        401 -> "Credenciales inválidas o sesión expirada (401)"
-        403 -> "No tienes permiso para realizar esta acción (403)"
+        400 -> "Solicitud inv\u00e1lida (400)"
+        401 -> "Credenciales inv\u00e1lidas o sesi\u00f3n expirada (401)"
+        403 -> "No tienes permiso para realizar esta acci\u00f3n (403)"
         404 -> "Recurso no encontrado (404)"
         409 -> "Conflicto: el recurso ya existe (409)"
         else -> "Error del servidor (HTTP $code)"
@@ -438,29 +471,29 @@ class NotizApiClient(private val sessionPrefs: SessionPreferences) {
 
     private fun parseUser(json: JSONObject): User = User(
         id = json.optString("id"),
-        username = json.optString("username"),
-        email = json.optString("email"),
+        username = repairMojibake(json.optString("username")),
+        email = repairMojibake(json.optString("email")),
         createdAt = json.optString("created_at")
     )
 
     private fun parseFolder(json: JSONObject): Folder = Folder(
         id = json.optString("id"),
         userId = json.optString("user_id"),
-        name = json.optString("name"),
+        name = repairMojibake(json.optString("name")),
         createdAt = json.optString("created_at")
     )
 
     private fun parseNote(json: JSONObject): Note {
         val tagsArr = json.optJSONArray("tags") ?: JSONArray()
-        val tags = List(tagsArr.length()) { i -> tagsArr.optString(i) }.filter { it.isNotBlank() }
+        val tags = List(tagsArr.length()) { i -> repairMojibake(tagsArr.optString(i)) }.filter { it.isNotBlank() }
         val folderId = if (json.isNull("folder_id")) null else json.optString("folder_id").ifBlank { null }
         return Note(
             id = json.optString("id"),
             ownerId = json.optString("owner_id"),
-            ownerUsername = json.optString("owner_username"),
+            ownerUsername = repairMojibake(json.optString("owner_username")),
             folderId = folderId,
-            title = json.optString("title"),
-            body = json.optString("body"),
+            title = repairMojibake(json.optString("title")).replace("\u200B", "").trim(),
+            body = repairMojibake(json.optString("body")),
             tags = tags,
             accessRole = json.optString("access_role", "owner"),
             createdAt = json.optString("created_at"),
@@ -471,8 +504,8 @@ class NotizApiClient(private val sessionPrefs: SessionPreferences) {
     private fun parseShareInfo(json: JSONObject): NoteShareInfo = NoteShareInfo(
         noteId = json.optString("note_id"),
         sharedWithUserId = json.optString("shared_with_user_id"),
-        username = json.optString("username"),
-        email = json.optString("email"),
+        username = repairMojibake(json.optString("username")),
+        email = repairMojibake(json.optString("email")),
         permission = json.optString("permission", "read"),
         createdAt = json.optString("created_at")
     )
@@ -481,11 +514,11 @@ class NotizApiClient(private val sessionPrefs: SessionPreferences) {
         id = json.optString("id"),
         noteId = json.optString("note_id"),
         uploaderId = json.optString("uploader_id"),
-        filename = json.optString("filename"),
+        filename = repairMojibake(json.optString("filename")),
         contentType = json.optString("content_type"),
         sizeBytes = json.optInt("size_bytes", 0),
         url = json.optString("url"),
-        markdown = json.optString("markdown"),
+        markdown = repairMojibake(json.optString("markdown")),
         createdAt = json.optString("created_at")
     )
 }

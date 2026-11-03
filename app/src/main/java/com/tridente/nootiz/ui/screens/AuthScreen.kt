@@ -16,9 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -27,11 +25,9 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -58,7 +54,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -95,6 +90,7 @@ fun AuthScreen(
     var checkingHealth by remember { mutableStateOf(false) }
 
     var isRegisterMode by remember { mutableStateOf(false) }
+    var loginIdentifier by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -103,8 +99,6 @@ fun AuthScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var infoMessage by remember { mutableStateOf<String?>(null) }
-    var showGoogleDialog by remember { mutableStateOf(false) }
-    var googleIdToken by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         val loadedUrl = withContext(Dispatchers.IO) {
@@ -161,7 +155,7 @@ fun AuthScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.Edit,
-                    contentDescription = "CloudNotes",
+                    contentDescription = "Notiz",
                     tint = LimeAccent,
                     modifier = Modifier.size(22.dp)
                 )
@@ -171,7 +165,7 @@ fun AuthScreen(
 
             // Title & Subtitle matching Image 1 & 3
             Text(
-                text = if (isRegisterMode) "Crear perfil" else "CloudNotes",
+                text = if (isRegisterMode) "Crear perfil" else "Notiz",
                 style = MaterialTheme.typography.headlineLarge,
                 color = PureWhite
             )
@@ -258,7 +252,7 @@ fun AuthScreen(
                                 }
                                 else -> {
                                     Text(
-                                        text = "Probar conexión",
+                                        text = "Probar conexi\u00f3n",
                                         color = SkyBlueCard,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Medium
@@ -289,7 +283,7 @@ fun AuthScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Refresh,
-                                        contentDescription = "Probar conexión",
+                                        contentDescription = "Probar conexi\u00f3n",
                                         tint = LimeAccent,
                                         modifier = Modifier.size(18.dp)
                                     )
@@ -316,7 +310,7 @@ fun AuthScreen(
                     AnimatedVisibility(visible = showServerPresets) {
                         Column(modifier = Modifier.padding(top = 10.dp)) {
                             Text(
-                                text = "Elegir servidor rápido:",
+                                text = "Elegir servidor r\u00e1pido:",
                                 color = TextMutedLight,
                                 fontSize = 11.sp
                             )
@@ -361,57 +355,84 @@ fun AuthScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Email Field (matching Image 1 & 3)
-            Text(
-                text = "Email",
-                color = TextMutedLight,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            OutlinedTextField(
-                value = email,
-                onValueChange = {
-                    email = it
-                    errorMessage = null
-                },
-                placeholder = { Text("hola@ejemplo.com") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Email,
-                    imeAction = ImeAction.Next
-                ),
-                shape = RoundedCornerShape(14.dp),
-                colors = fieldColors,
-                modifier = Modifier.fillMaxWidth()
-            )
+            if (isRegisterMode) {
+                // Email Field (Register mode)
+                Text(
+                    text = "Email",
+                    color = TextMutedLight,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = {
+                        email = it
+                        errorMessage = null
+                    },
+                    placeholder = { Text("hola@ejemplo.com") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Email,
+                        imeAction = ImeAction.Next
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = fieldColors,
+                    modifier = Modifier.fillMaxWidth()
+                )
 
-            Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-            // Username Field (matching Image 1 & 3)
-            Text(
-                text = "Username",
-                color = TextMutedLight,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            OutlinedTextField(
-                value = username,
-                onValueChange = {
-                    username = it
-                    errorMessage = null
-                },
-                placeholder = { Text("Tu nombre de usuario") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Text,
-                    imeAction = ImeAction.Next
-                ),
-                shape = RoundedCornerShape(14.dp),
-                colors = fieldColors,
-                modifier = Modifier.fillMaxWidth()
-            )
+                // Username Field (Register mode)
+                Text(
+                    text = "Username",
+                    color = TextMutedLight,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = {
+                        username = it
+                        errorMessage = null
+                    },
+                    placeholder = { Text("Tu nombre de usuario") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Next
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = fieldColors,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                // Single unified Correo / Usuario Field (Login mode)
+                Text(
+                    text = "Correo / Usuario",
+                    color = TextMutedLight,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = loginIdentifier,
+                    onValueChange = {
+                        loginIdentifier = it
+                        errorMessage = null
+                    },
+                    placeholder = { Text("hola@ejemplo.com o tu usuario") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Next
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = fieldColors,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -429,7 +450,7 @@ fun AuthScreen(
                     password = it
                     errorMessage = null
                 },
-                placeholder = { Text("••••••••") },
+                placeholder = { Text("\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022") },
                 singleLine = true,
                 visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(
@@ -497,11 +518,11 @@ fun AuthScreen(
                             return@Button
                         }
                         if (!email.contains("@")) {
-                            errorMessage = "Ingresa un correo electrónico válido."
+                            errorMessage = "Ingresa un correo electr\u00f3nico v\u00e1lido."
                             return@Button
                         }
                         if (password.length < 8) {
-                            errorMessage = "La contraseña debe tener mínimo 8 caracteres."
+                            errorMessage = "La contrase\u00f1a debe tener m\u00ednimo 8 caracteres."
                             return@Button
                         }
                         isLoading = true
@@ -517,13 +538,13 @@ fun AuthScreen(
                             }
                         }
                     } else {
-                        val identifier = email.trim().ifEmpty { username.trim() }
+                        val identifier = loginIdentifier.trim()
                         if (identifier.isEmpty()) {
-                            errorMessage = "Ingresa tu email o tu nombre de usuario."
+                            errorMessage = "Ingresa tu correo o tu nombre de usuario."
                             return@Button
                         }
                         if (password.isEmpty()) {
-                            errorMessage = "Ingresa tu contraseña."
+                            errorMessage = "Ingresa tu contrase\u00f1a."
                             return@Button
                         }
                         isLoading = true
@@ -535,7 +556,7 @@ fun AuthScreen(
                                 sessionPrefs.user = auth.user
                                 onAuthenticated(auth)
                             }.onFailure { err ->
-                                errorMessage = err.message ?: "Error al iniciar sesión"
+                                errorMessage = err.message ?: "Error al iniciar sesi\u00f3n"
                             }
                         }
                     }
@@ -566,161 +587,47 @@ fun AuthScreen(
             Spacer(modifier = Modifier.height(14.dp))
 
             // Secondary links matching reference image:
-            // "¿Olvidaste tu contraseña?"
-            // "¿No tienes una cuenta? Crear cuenta"
+            // "\u00bfOlvidaste tu contrase\u00f1a?"
+            // "\u00bfNo tienes una cuenta? Crear cuenta"
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 if (!isRegisterMode) {
                     Text(
-                        text = "¿Olvidaste tu contraseña?",
+                        text = "\u00bfOlvidaste tu contrase\u00f1a?",
                         color = TextMutedLight,
-                        fontSize = 13.sp,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable {
-                                infoMessage = "Contacta al administrador del servidor o inicia sesión con Google OAuth."
-                            }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                        fontSize = 12.sp,
+                        modifier = Modifier.clickable {
+                            infoMessage = "Contacta al administrador del servidor para restablecer tu contrase\u00f1a."
+                        }
                     )
-
-                    Spacer(modifier = Modifier.height(6.dp))
                 }
 
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable {
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isRegisterMode) "\u00bfYa tienes una cuenta? " else "\u00bfNo tienes una cuenta? ",
+                        color = TextMutedLight,
+                        fontSize = 12.sp
+                    )
+                    Text(
+                        text = if (isRegisterMode) "Iniciar sesi\u00f3n" else "Crear cuenta",
+                        color = PureWhite,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        textDecoration = TextDecoration.Underline,
+                        modifier = Modifier.clickable {
                             isRegisterMode = !isRegisterMode
                             errorMessage = null
                             infoMessage = null
                         }
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = if (isRegisterMode) "¿Ya tienes una cuenta? " else "¿No tienes una cuenta? ",
-                        color = TextMutedLight,
-                        fontSize = 13.sp
-                    )
-                    Text(
-                        text = if (isRegisterMode) "Iniciar sesión" else "Crear cuenta",
-                        color = LimeAccent,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        textDecoration = TextDecoration.Underline
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                TextButton(
-                    onClick = { showGoogleDialog = true }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Lock,
-                        contentDescription = null,
-                        tint = SkyBlueCard,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Continuar con Google (ID Token)",
-                        color = SkyBlueCard,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(SkyBlueCard.copy(alpha = 0.5f))
-                    )
-                    Text(
-                        text = "UN ESPACIO PARA PENSAR",
-                        color = TextMutedLight.copy(alpha = 0.65f),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 1.4.sp,
-                        textAlign = TextAlign.Center
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(SkyBlueCard.copy(alpha = 0.5f))
                     )
                 }
             }
         }
-    }
-
-    if (showGoogleDialog) {
-        AlertDialog(
-            onDismissRequest = { showGoogleDialog = false },
-            title = {
-                Text(
-                    text = "Acceso con Google OAuth2",
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Pega el id_token emitido por Google Identity Services para validarlo contra POST /api/auth/google:",
-                        fontSize = 13.sp
-                    )
-                    OutlinedTextField(
-                        value = googleIdToken,
-                        onValueChange = { googleIdToken = it },
-                        placeholder = { Text("eyJhbGciOiJSUzI1NiIs...") },
-                        maxLines = 4,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (googleIdToken.isBlank()) return@Button
-                        showGoogleDialog = false
-                        isLoading = true
-                        sessionPrefs.baseUrl = serverUrl
-                        scope.launch {
-                            val res = apiClient.loginWithGoogle(googleIdToken.trim())
-                            isLoading = false
-                            res.onSuccess { auth ->
-                                sessionPrefs.token = auth.token
-                                sessionPrefs.user = auth.user
-                                onAuthenticated(auth)
-                            }.onFailure { err ->
-                                errorMessage = err.message ?: "Error al validar id_token de Google"
-                            }
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = RoyalBlue,
-                        contentColor = PureWhite
-                    )
-                ) {
-                    Text("Validar Token")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showGoogleDialog = false }) {
-                    Text("Cancelar")
-                }
-            }
-        )
     }
 }

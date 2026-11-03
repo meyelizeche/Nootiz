@@ -120,11 +120,11 @@ private sealed class DashboardFolderSelection {
 
 private sealed class DashboardDateFilter(val label: String) {
     data object All : DashboardDateFilter("Todas las fechas")
-    data object RecentTodayYesterday : DashboardDateFilter("Más recientes (Hoy y ayer)")
-    data object Last7Days : DashboardDateFilter("Últimos 7 días")
-    data object Last30Days : DashboardDateFilter("Últimos 30 días")
+    data object RecentTodayYesterday : DashboardDateFilter("M\u00e1s recientes")
+    data object Last7Days : DashboardDateFilter("\u00daltimos 7 d\u00edas")
+    data object Last30Days : DashboardDateFilter("\u00daltimos 30 d\u00edas")
     data class ByMonth(val yearMonth: YearMonth, val displayLabel: String) : DashboardDateFilter(displayLabel)
-    data class ByYear(val year: Int) : DashboardDateFilter("Año $year")
+    data class ByYear(val year: Int) : DashboardDateFilter("A\u00f1o $year")
 }
 
 private val SPANISH_MONTHS_FULL = listOf(
@@ -373,7 +373,7 @@ fun DashboardScreen(
             // Count only pinned notes that still exist in the user's current notes
             val activePinnedIds = pinnedNoteIds.filter { id -> notes.any { it.id == id } }
             if (activePinnedIds.size >= 3) {
-                errorMessage = "Solo puedes fijar un máximo de 3 notas."
+                errorMessage = "Solo puedes fijar un m\u00e1ximo de 3 notas."
                 return
             }
             val updated = activePinnedIds + note.id
@@ -472,7 +472,7 @@ fun DashboardScreen(
                 IconButton(onClick = onLogout) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                        contentDescription = "Cerrar sesión",
+                        contentDescription = "Cerrar sesi\u00f3n",
                         tint = TextSecondarySlate
                     )
                 }
@@ -504,7 +504,7 @@ fun DashboardScreen(
                         IconButton(onClick = { searchQuery = "" }) {
                             Icon(
                                 imageVector = Icons.Default.Close,
-                                contentDescription = "Limpiar búsqueda",
+                                contentDescription = "Limpiar b\u00fasqueda",
                                 tint = TextSecondarySlate
                             )
                         }
@@ -537,8 +537,8 @@ fun DashboardScreen(
                 Box {
                     val isFolderActive = folderSelection !is DashboardFolderSelection.All
                     val folderLabel = when (val sel = folderSelection) {
-                        is DashboardFolderSelection.All -> "Carpetas: Mis Notas"
-                        is DashboardFolderSelection.SharedByMe -> "Compartidas por mí"
+                        is DashboardFolderSelection.All -> "Todas"
+                        is DashboardFolderSelection.SharedByMe -> "Compartidas por m\u00ed"
                         is DashboardFolderSelection.SharedWithMe -> "Compartidas conmigo"
                         is DashboardFolderSelection.FolderItem -> sel.folder.name
                     }
@@ -592,7 +592,7 @@ fun DashboardScreen(
                         DropdownMenuItem(
                             text = {
                                 Text(
-                                    text = "Mis Notas (Todas)",
+                                    text = "Todas",
                                     color = TextPrimaryNavy,
                                     fontWeight = if (folderSelection is DashboardFolderSelection.All) FontWeight.Bold else FontWeight.Normal
                                 )
@@ -617,7 +617,7 @@ fun DashboardScreen(
                         DropdownMenuItem(
                             text = {
                                 Text(
-                                    text = "Compartidas por mí",
+                                    text = "Compartidas por m\u00ed",
                                     color = TextPrimaryNavy,
                                     fontWeight = if (folderSelection is DashboardFolderSelection.SharedByMe) FontWeight.Bold else FontWeight.Normal
                                 )
@@ -964,7 +964,7 @@ fun DashboardScreen(
                         if (availableYears.isNotEmpty()) {
                             HorizontalDivider(color = IceBlueCard)
                             Text(
-                                text = "Por año",
+                                text = "Por a\u00f1o",
                                 color = TextSecondarySlate,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -1080,16 +1080,16 @@ fun DashboardScreen(
                                 text = when {
                                     searchQuery.isNotBlank() -> "No se encontraron notas para \"$searchQuery\""
                                     dateFilter != DashboardDateFilter.All -> "No hay notas en \"${dateFilter.label}\""
-                                    folderSelection is DashboardFolderSelection.SharedByMe -> "Aún no estás compartiendo ninguna nota"
-                                    folderSelection is DashboardFolderSelection.SharedWithMe -> "Nadie ha compartido notas contigo aún"
-                                    else -> "Aún no hay notas aquí"
+                                    folderSelection is DashboardFolderSelection.SharedByMe -> "A\u00fan no est\u00e1s compartiendo ninguna nota"
+                                    folderSelection is DashboardFolderSelection.SharedWithMe -> "Nadie ha compartido notas contigo a\u00fan"
+                                    else -> "A\u00fan no hay notas aqu\u00ed"
                                 },
                                 style = MaterialTheme.typography.titleMedium,
                                 color = TextPrimaryNavy
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Toca el botón + o desliza hacia abajo para actualizar.",
+                                text = "Toca el bot\u00f3n + o desliza hacia abajo para actualizar.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = TextSecondarySlate
                             )
@@ -1405,7 +1405,7 @@ private fun NoteDashboardCard(
                         Spacer(modifier = Modifier.width(6.dp))
                     }
                     Text(
-                        text = note.title.ifBlank { "Sin título" },
+                        text = note.title,
                         style = MaterialTheme.typography.titleLarge,
                         color = TextPrimaryNavy,
                         maxLines = 1,
@@ -1459,7 +1459,7 @@ private fun NoteDashboardCard(
                             )
                             Spacer(modifier = Modifier.width(5.dp))
                             Text(
-                                text = "De @${note.ownerUsername} • ${if (note.accessRole == "edit") "Editor" else "Lector"}",
+                                text = "De @${note.ownerUsername} \u2022 ${if (note.accessRole == "edit") "Editor" else "Lector"}",
                                 color = PureWhite,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold

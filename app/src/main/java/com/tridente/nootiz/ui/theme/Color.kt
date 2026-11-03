@@ -2,7 +2,7 @@ package com.tridente.nootiz.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// CloudNotes / Nootiz Visual Guide Palette (from design reference images)
+// Notiz Visual Guide Palette (from design reference images)
 val NavyBackground = Color(0xFF122440)
 val NavyDarkHeader = Color(0xFF11223E)
 val NavyInputSurface = Color(0xFF1E3352)
