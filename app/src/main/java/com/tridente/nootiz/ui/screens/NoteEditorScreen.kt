@@ -81,6 +81,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.TimePickerDefaults
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -2004,6 +2009,7 @@ fun NoteEditorScreen(
         var selectedMinute by remember { mutableIntStateOf(activeReminder?.minute ?: 0) }
         var localAlertChecked by remember { mutableStateOf(activeReminder?.localAlert ?: true) }
         var googleCalendarChecked by remember { mutableStateOf(activeReminder?.googleCalendar ?: false) }
+        var showTimeDialog by remember { mutableStateOf(false) }
 
         ModalBottomSheet(
             onDismissRequest = { showReminderSheet = false },
@@ -2014,6 +2020,7 @@ fun NoteEditorScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp)
                     .padding(bottom = 28.dp)
             ) {
@@ -2134,17 +2141,71 @@ fun NoteEditorScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Time selector row ("09:00", "12:00", "16:00", "19:00")
+                        // Granular time selector: fine-tune steppers + exact picker + quick presets
                         Text(
-                            text = "Hora de la alerta: %02d:%02d".format(
-                                selectedHour,
-                                selectedMinute
-                            ),
+                            text = "Hora de la alerta",
                             color = TextPrimaryNavy,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 13.sp
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val stepMinutes = { delta: Int ->
+                                val total = ((selectedHour * 60 + selectedMinute + delta) % 1440 + 1440) % 1440
+                                selectedHour = total / 60
+                                selectedMinute = total % 60
+                            }
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(PureWhite)
+                                    .clickable { stepMinutes(-5) }
+                            ) {
+                                Text("-5", color = TextPrimaryNavy, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(RoyalBlue)
+                                    .clickable { showTimeDialog = true }
+                                    .padding(horizontal = 22.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    text = "%02d:%02d".format(selectedHour, selectedMinute),
+                                    color = PureWhite,
+                                    fontSize = 26.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(PureWhite)
+                                    .clickable { stepMinutes(5) }
+                            ) {
+                                Text("+5", color = TextPrimaryNavy, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Toca la hora para elegirla exactamente",
+                            color = TextSecondarySlate,
+                            fontSize = 11.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.horizontalScroll(rememberScrollState())
@@ -2170,7 +2231,65 @@ fun NoteEditorScreen(
                                 }
                             }
                         }
-                    }
+
+                        if (showTimeDialog) {
+                            val timeState = rememberTimePickerState(
+                                initialHour = selectedHour,
+                                initialMinute = selectedMinute,
+                                is24Hour = true
+                            )
+                            Dialog(
+                                onDismissRequest = { showTimeDialog = false },
+                                properties = DialogProperties(usePlatformDefaultWidth = false)
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(24.dp),
+                                    color = PureWhite,
+                                    modifier = Modifier.padding(16.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(20.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(
+                                            text = "Elegir hora",
+                                            color = TextPrimaryNavy,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 16.sp,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(bottom = 16.dp)
+                                        )
+                                        TimePicker(
+                                            state = timeState,
+                                            colors = TimePickerDefaults.colors(
+                                                selectorColor = RoyalBlue,
+                                                clockDialSelectedContentColor = PureWhite,
+                                                timeSelectorSelectedContainerColor = IceBlueChip,
+                                                timeSelectorSelectedContentColor = RoyalBlue
+                                            )
+                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.End
+                                        ) {
+                                            TextButton(onClick = { showTimeDialog = false }) {
+                                                Text("Cancelar", color = TextSecondarySlate)
+                                            }
+                                            TextButton(
+                                                onClick = {
+                                                    selectedHour = timeState.hour
+                                                    selectedMinute = timeState.minute
+                                                    showTimeDialog = false
+                                                }
+                                            ) {
+                                                Text("Aceptar", color = RoyalBlue, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }                    }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -2216,7 +2335,7 @@ fun NoteEditorScreen(
                         colors = CheckboxDefaults.colors(checkedColor = RoyalBlue)
                     )
                     Text(
-                        text = "Google Calendar",
+                        text = "Calendario del dispositivo",
                         color = TextPrimaryNavy,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium
