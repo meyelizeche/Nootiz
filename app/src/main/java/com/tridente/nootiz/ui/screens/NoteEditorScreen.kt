@@ -163,6 +163,13 @@ private data class NoteTextBlock(
     val isChecked: Boolean = false
 )
 
+private data class NoteContentSnapshot(
+    val title: String,
+    val body: String,
+    val tags: List<String>,
+    val folderId: String?
+)
+
 private const val LITERAL_ESCAPE_MARKER = "\u200B"
 
 private fun parseBlocksFromMarkdown(rawBody: String): List<NoteTextBlock> {
@@ -469,6 +476,21 @@ fun NoteEditorScreen(
         mutableStateOf(initialNote?.id?.let { sessionPrefs.getReminderForNote(it) })
     }
 
+    // Last content known to be persisted on the server. A note is only saved (and thus bumped to the top
+    // of 'recientes') when its content differs from this baseline.
+    var lastSavedSnapshot by remember {
+        mutableStateOf<NoteContentSnapshot?>(
+            initialNote?.let {
+                NoteContentSnapshot(
+                    title = it.title.trim(),
+                    body = serializeBlocksToMarkdown(parseBlocksFromMarkdown(it.body)),
+                    tags = it.tags,
+                    folderId = it.folderId ?: initialFolderId
+                )
+            }
+        )
+    }
+
     val canEdit = currentNote?.canEdit ?: true
     val isOwner = currentNote?.isOwner ?: true
 
@@ -517,6 +539,12 @@ fun NoteEditorScreen(
                 folderId = fresh.folderId
                 textBlocks.clear()
                 textBlocks.addAll(parseBlocksFromMarkdown(fresh.body))
+                lastSavedSnapshot = NoteContentSnapshot(
+                    title = fresh.title.trim(),
+                    body = serializeBlocksToMarkdown(textBlocks.toList()),
+                    tags = fresh.tags,
+                    folderId = fresh.folderId
+                )
                 if (focusedBlockIndex >= textBlocks.size) {
                     focusedBlockIndex = (textBlocks.size - 1).coerceAtLeast(0)
                 }
@@ -529,9 +557,12 @@ fun NoteEditorScreen(
         if (!canEdit) return currentNote
         val serializedBody = currentMarkdownBody()
         val effectiveTitle = title.trim()
+        val existing = currentNote
+        val snapshotToSave = NoteContentSnapshot(effectiveTitle, serializedBody, tags, folderId)
+        // Nothing changed since the last persisted version: don't touch the note (keeps its position/updated_at).
+        if (existing != null && snapshotToSave == lastSavedSnapshot) return existing
         isSaving = true
         errorMessage = null
-        val existing = currentNote
         val result = if (existing == null) {
             apiClient.createNote(
                 title = effectiveTitle,
@@ -552,6 +583,7 @@ fun NoteEditorScreen(
         isSaving = false
         return result.fold(
             onSuccess = { saved ->
+                lastSavedSnapshot = snapshotToSave
                 currentNote = saved
                 title = saved.title
                 tags = saved.tags
