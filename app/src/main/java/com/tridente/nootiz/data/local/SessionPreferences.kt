@@ -158,6 +158,100 @@ class SessionPreferences(context: Context) {
         }
     }
 
+    fun remapNoteId(oldNoteId: String, newNoteId: String) {
+        if (oldNoteId == newNoteId || oldNoteId.isBlank() || newNoteId.isBlank()) return
+        var pinsChanged = false
+        if (cachedPinnedNoteIds.contains(oldNoteId)) {
+            cachedPinnedNoteIds = cachedPinnedNoteIds.map { if (it == oldNoteId) newNoteId else it }.distinct()
+            pinsChanged = true
+        }
+        var remindersChanged = false
+        val existingReminder = cachedReminders[oldNoteId]
+        if (existingReminder != null) {
+            val updatedMap = cachedReminders.toMutableMap()
+            updatedMap.remove(oldNoteId)
+            updatedMap[newNoteId] = existingReminder.copy(noteId = newNoteId)
+            cachedReminders = updatedMap
+            remindersChanged = true
+        }
+        if (pinsChanged || remindersChanged) {
+            val pinsSnapshot = cachedPinnedNoteIds
+            val remindersSnapshot = cachedReminders
+            ioScope.launch {
+                ensureLoaded()
+                val editor = prefsInstance?.edit() ?: return@launch
+                if (pinsChanged) {
+                    val pinsArr = JSONArray()
+                    pinsSnapshot.forEach { pinsArr.put(it) }
+                    editor.putString(KEY_PINNED_NOTES_JSON, pinsArr.toString())
+                }
+                if (remindersChanged) {
+                    val remArr = JSONArray()
+                    remindersSnapshot.values.forEach { r ->
+                        remArr.put(
+                            JSONObject().apply {
+                                put("noteId", r.noteId)
+                                put("noteTitle", r.noteTitle)
+                                put("year", r.year)
+                                put("month", r.month)
+                                put("dayOfMonth", r.dayOfMonth)
+                                put("hour", r.hour)
+                                put("minute", r.minute)
+                                put("localAlert", r.localAlert)
+                                put("googleCalendar", r.googleCalendar)
+                            }
+                        )
+                    }
+                    editor.putString(KEY_REMINDERS_JSON, remArr.toString())
+                }
+                editor.apply()
+            }
+        }
+    }
+
+    fun removeNoteMetadata(noteId: String) {
+        var changed = false
+        if (cachedPinnedNoteIds.contains(noteId)) {
+            cachedPinnedNoteIds = cachedPinnedNoteIds - noteId
+            changed = true
+        }
+        if (cachedReminders.containsKey(noteId)) {
+            val updated = cachedReminders.toMutableMap()
+            updated.remove(noteId)
+            cachedReminders = updated
+            changed = true
+        }
+        if (changed) {
+            val pinsSnapshot = cachedPinnedNoteIds
+            val remindersSnapshot = cachedReminders
+            ioScope.launch {
+                ensureLoaded()
+                val editor = prefsInstance?.edit() ?: return@launch
+                val pinsArr = JSONArray()
+                pinsSnapshot.forEach { pinsArr.put(it) }
+                editor.putString(KEY_PINNED_NOTES_JSON, pinsArr.toString())
+                val remArr = JSONArray()
+                remindersSnapshot.values.forEach { r ->
+                    remArr.put(
+                        JSONObject().apply {
+                            put("noteId", r.noteId)
+                            put("noteTitle", r.noteTitle)
+                            put("year", r.year)
+                            put("month", r.month)
+                            put("dayOfMonth", r.dayOfMonth)
+                            put("hour", r.hour)
+                            put("minute", r.minute)
+                            put("localAlert", r.localAlert)
+                            put("googleCalendar", r.googleCalendar)
+                        }
+                    )
+                }
+                editor.putString(KEY_REMINDERS_JSON, remArr.toString())
+                editor.apply()
+            }
+        }
+    }
+
     fun clearAuth() {
         cachedToken = null
         cachedUser = null

@@ -70,3 +70,12 @@ data class NoteReminder(
     val localAlert: Boolean,
     val googleCalendar: Boolean
 )
+
+data class SyncStatus(
+    val isOnline: Boolean = true,
+    val isSyncing: Boolean = false,
+    val pendingCount: Int = 0,
+    val pendingNoteIds: Set<String> = emptySet(),
+    val lastSyncedAtMillis: Long? = null,
+    val lastError: String? = null
+)

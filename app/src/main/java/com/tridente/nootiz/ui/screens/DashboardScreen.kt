@@ -63,6 +63,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -82,12 +83,13 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tridente.nootiz.R
+import com.tridente.nootiz.data.local.LocalCacheStore
 import com.tridente.nootiz.data.local.SessionPreferences
 import com.tridente.nootiz.data.model.Folder
 import com.tridente.nootiz.data.model.Note
 import com.tridente.nootiz.data.model.NoteShareInfo
 import com.tridente.nootiz.data.model.User
-import com.tridente.nootiz.data.remote.NotizApiClient
+import com.tridente.nootiz.data.sync.NotizRepository
 import com.tridente.nootiz.ui.theme.ErrorRedDark
 import com.tridente.nootiz.ui.theme.IceBlueCard
 import com.tridente.nootiz.ui.theme.IceBlueChip
@@ -99,8 +101,6 @@ import com.tridente.nootiz.ui.theme.PureWhite
 import com.tridente.nootiz.ui.theme.RoyalBlue
 import com.tridente.nootiz.ui.theme.TextPrimaryNavy
 import com.tridente.nootiz.ui.theme.TextSecondarySlate
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
@@ -195,12 +195,15 @@ fun DashboardScreen(
     currentUser: User?,
     serverUrl: String,
     sessionPrefs: SessionPreferences,
-    apiClient: NotizApiClient,
+    repository: NotizRepository,
     onOpenNote: (Note) -> Unit,
     onCreateNewNote: (selectedFolderId: String?) -> Unit,
     onLogout: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    val syncStatus by repository.syncStatus.collectAsState()
+    val dataVersion by repository.dataVersion.collectAsState()
+    val remappedIds by repository.remappedIds.collectAsState()
 
     var folders by remember { mutableStateOf<List<Folder>>(emptyList()) }
     var notes by remember { mutableStateOf<List<Note>>(emptyList()) }
@@ -225,54 +228,59 @@ fun DashboardScreen(
     var pinnedNoteIds by remember { mutableStateOf(sessionPrefs.getPinnedNoteIds()) }
     var swipedOpenNoteId by remember { mutableStateOf<String?>(null) }
 
-    // Folder dialogs
+    // Folder dialogs & Logout confirmation
     var showCreateFolderDialog by remember { mutableStateOf(false) }
     var newFolderName by remember { mutableStateOf("") }
     var folderToEdit by remember { mutableStateOf<Folder?>(null) }
     var editFolderName by remember { mutableStateOf("") }
+    var showLogoutPendingWarning by remember { mutableStateOf(false) }
 
     val pullToRefreshState = rememberPullToRefreshState()
 
     val selectedFolderIdForApi = (folderSelection as? DashboardFolderSelection.FolderItem)?.folder?.id
 
+    suspend fun reloadFromCache() {
+        val cached = repository.loadCachedDashboard()
+        folders = cached.folders
+        notes = cached.notes
+        outgoingSharesByNoteId.clear()
+        outgoingSharesByNoteId.putAll(cached.outgoingSharesByNote)
+        pinnedNoteIds = sessionPrefs.getPinnedNoteIds()
+
+        // Seamlessly update selected folder if an offline-created folder was synced to a server UUID
+        val currentFolderSel = folderSelection as? DashboardFolderSelection.FolderItem
+        if (currentFolderSel != null) {
+            val mappedId = remappedIds[currentFolderSel.folder.id] ?: currentFolderSel.folder.id
+            val updatedFolder = cached.folders.find { it.id == mappedId }
+            if (updatedFolder != null && updatedFolder != currentFolderSel.folder) {
+                folderSelection = DashboardFolderSelection.FolderItem(updatedFolder)
+            }
+        }
+    }
+
     fun loadData(isPullRefresh: Boolean = false) {
         if (isPullRefresh) {
             isRefreshing = true
-        } else {
-            isLoading = true
         }
         errorMessage = null
         scope.launch {
-            val foldersRes = apiClient.getFolders()
-            foldersRes.onSuccess { folders = it }
-
-            val notesRes = apiClient.getNotes(
-                folderId = selectedFolderIdForApi,
-                tag = selectedTag,
-                sharedOnly = folderSelection is DashboardFolderSelection.SharedWithMe
-            )
-            notesRes.onSuccess { fetchedNotes ->
-                notes = fetchedNotes
-                val ownedNotes = fetchedNotes.filter { it.isOwner }
-                val sharePairs = ownedNotes.map { ownedNote ->
-                    async {
-                        val shares = apiClient.getNoteShares(ownedNote.id).getOrDefault(emptyList())
-                        ownedNote.id to shares
-                    }
-                }.awaitAll()
-                sharePairs.forEach { (noteId, shareList) ->
-                    outgoingSharesByNoteId[noteId] = shareList
-                }
-            }.onFailure { err ->
-                errorMessage = err.message ?: "No se pudieron cargar las notas"
+            reloadFromCache()
+            if (notes.isNotEmpty() || folders.isNotEmpty()) {
+                isLoading = false
             }
+            repository.syncNow(refreshFromServer = true)
+            reloadFromCache()
             isLoading = false
             isRefreshing = false
         }
     }
 
-    LaunchedEffect(folderSelection, selectedTag) {
+    LaunchedEffect(Unit) {
         loadData(isPullRefresh = false)
+    }
+
+    LaunchedEffect(dataVersion) {
+        reloadFromCache()
     }
 
     val allAvailableTags = remember(notes, selectedTag) {
@@ -304,6 +312,7 @@ fun DashboardScreen(
         notes,
         searchQuery,
         folderSelection,
+        selectedTag,
         dateFilter,
         pinnedNoteIds,
         outgoingSharesByNoteId.toMap()
@@ -317,28 +326,36 @@ fun DashboardScreen(
             is DashboardFolderSelection.FolderItem -> notes.filter { it.folderId == sel.folder.id }
         }
 
+        val byTag = if (selectedTag == null) {
+            byFolderOrShare
+        } else {
+            byFolderOrShare.filter { n ->
+                n.tags.any { t -> t.equals(selectedTag, ignoreCase = true) }
+            }
+        }
+
         val today = LocalDate.now()
         val byDate = when (val df = dateFilter) {
-            is DashboardDateFilter.All -> byFolderOrShare
-            is DashboardDateFilter.RecentTodayYesterday -> byFolderOrShare.filter { n ->
+            is DashboardDateFilter.All -> byTag
+            is DashboardDateFilter.RecentTodayYesterday -> byTag.filter { n ->
                 val d = parseNoteLocalDateTime(n.updatedAt.ifBlank { n.createdAt })?.toLocalDate() ?: return@filter false
                 d == today || d == today.minusDays(1)
             }
-            is DashboardDateFilter.Last7Days -> byFolderOrShare.filter { n ->
+            is DashboardDateFilter.Last7Days -> byTag.filter { n ->
                 val d = parseNoteLocalDateTime(n.updatedAt.ifBlank { n.createdAt })?.toLocalDate() ?: return@filter false
                 val diff = ChronoUnit.DAYS.between(d, today)
                 diff in 0..7
             }
-            is DashboardDateFilter.Last30Days -> byFolderOrShare.filter { n ->
+            is DashboardDateFilter.Last30Days -> byTag.filter { n ->
                 val d = parseNoteLocalDateTime(n.updatedAt.ifBlank { n.createdAt })?.toLocalDate() ?: return@filter false
                 val diff = ChronoUnit.DAYS.between(d, today)
                 diff in 0..30
             }
-            is DashboardDateFilter.ByMonth -> byFolderOrShare.filter { n ->
+            is DashboardDateFilter.ByMonth -> byTag.filter { n ->
                 val ym = parseNoteLocalDateTime(n.updatedAt.ifBlank { n.createdAt })?.let { YearMonth.from(it) } ?: return@filter false
                 ym == df.yearMonth
             }
-            is DashboardDateFilter.ByYear -> byFolderOrShare.filter { n ->
+            is DashboardDateFilter.ByYear -> byTag.filter { n ->
                 val y = parseNoteLocalDateTime(n.updatedAt.ifBlank { n.createdAt })?.year ?: return@filter false
                 y == df.year
             }
@@ -388,18 +405,13 @@ fun DashboardScreen(
         swipedOpenNoteId = null
         scope.launch {
             val result = if (note.isOwner) {
-                apiClient.deleteNote(note.id)
+                repository.deleteNote(note.id)
             } else {
                 val myId = currentUser?.id ?: return@launch
-                apiClient.revokeNoteShare(note.id, myId)
+                repository.revokeNoteShare(note.id, myId)
             }
             result.onSuccess {
-                notes = notes.filterNot { it.id == note.id }
-                if (pinnedNoteIds.contains(note.id)) {
-                    val updatedPins = pinnedNoteIds - note.id
-                    pinnedNoteIds = updatedPins
-                    sessionPrefs.setPinnedNoteIds(updatedPins)
-                }
+                reloadFromCache()
             }.onFailure { err ->
                 errorMessage = err.message ?: "No se pudo eliminar la nota"
             }
@@ -433,7 +445,7 @@ fun DashboardScreen(
         ) {
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Top User Pill & Logout Action
+            // Top User Pill, Sync/Offline Status Pill & Logout Action
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -441,35 +453,138 @@ fun DashboardScreen(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(IceBlueSurface)
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Box(
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .size(26.dp)
-                            .clip(CircleShape)
-                            .background(RoyalBlue),
-                        contentAlignment = Alignment.Center
+                            .clip(RoundedCornerShape(50))
+                            .background(IceBlueSurface)
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
+                        Box(
+                            modifier = Modifier
+                                .size(26.dp)
+                                .clip(CircleShape)
+                                .background(RoyalBlue),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = (currentUser?.username?.firstOrNull()?.uppercaseChar() ?: 'U').toString(),
+                                color = PureWhite,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = (currentUser?.username?.firstOrNull()?.uppercaseChar() ?: 'U').toString(),
-                            color = PureWhite,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
+                            text = currentUser?.username ?: "Usuario",
+                            color = TextPrimaryNavy,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = currentUser?.username ?: "Usuario",
-                        color = TextPrimaryNavy,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+
+                    // Offline / Pending Sync Status Indicator Pill
+                    when {
+                        !syncStatus.isOnline -> {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(NavyToast)
+                                    .clickable { repository.requestSync(refreshFromServer = true) }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_cloud_off),
+                                    contentDescription = "Sin conexi\u00f3n",
+                                    tint = LimeAccent,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = if (syncStatus.pendingCount > 0) {
+                                        "Offline \u2022 ${syncStatus.pendingCount} pend."
+                                    } else {
+                                        "Modo offline"
+                                    },
+                                    color = PureWhite,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        syncStatus.isSyncing -> {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(IceBlueChip)
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_cloud_sync),
+                                    contentDescription = "Sincronizando",
+                                    tint = RoyalBlue,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "Sincronizando (${syncStatus.pendingCount})...",
+                                    color = RoyalBlue,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        syncStatus.pendingCount > 0 -> {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(LimeAccent)
+                                    .clickable { repository.requestSync(refreshFromServer = true) }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_cloud_sync),
+                                    contentDescription = "Pendiente de sincronizar",
+                                    tint = TextPrimaryNavy,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "${syncStatus.pendingCount} por sincronizar",
+                                    color = TextPrimaryNavy,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
                 }
 
-                IconButton(onClick = onLogout) {
+                IconButton(
+                    onClick = {
+                        if (syncStatus.pendingCount > 0) {
+                            showLogoutPendingWarning = true
+                        } else {
+                            onLogout()
+                        }
+                    }
+                ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ExitToApp,
                         contentDescription = "Cerrar sesi\u00f3n",
@@ -1105,11 +1220,14 @@ fun DashboardScreen(
                             val folderName = folders.find { it.id == note.folderId }?.name
                             val outgoingShares = outgoingSharesByNoteId[note.id].orEmpty()
                             val isPinned = pinnedNoteIds.contains(note.id)
+                            val isPendingSync = syncStatus.pendingNoteIds.contains(note.id) ||
+                                LocalCacheStore.isLocalId(note.id)
                             SwipeableNoteDashboardCard(
                                 note = note,
                                 folderName = folderName,
                                 outgoingShares = outgoingShares,
                                 isPinned = isPinned,
+                                isPendingSync = isPendingSync,
                                 isSwipedOpen = swipedOpenNoteId == note.id,
                                 onSwipeOpenChanged = { open ->
                                     swipedOpenNoteId = if (open) note.id else null
@@ -1152,8 +1270,8 @@ fun DashboardScreen(
                         if (clean.isEmpty()) return@Button
                         showCreateFolderDialog = false
                         scope.launch {
-                            apiClient.createFolder(clean).onSuccess { created ->
-                                folders = (folders + created).sortedBy { it.name.lowercase() }
+                            repository.createFolder(clean).onSuccess { created ->
+                                reloadFromCache()
                                 folderSelection = DashboardFolderSelection.FolderItem(created)
                             }.onFailure { err ->
                                 errorMessage = err.message
@@ -1191,11 +1309,11 @@ fun DashboardScreen(
                         onClick = {
                             folderToEdit = null
                             scope.launch {
-                                apiClient.deleteFolder(folder.id).onSuccess {
+                                repository.deleteFolder(folder.id).onSuccess {
                                     if ((folderSelection as? DashboardFolderSelection.FolderItem)?.folder?.id == folder.id) {
                                         folderSelection = DashboardFolderSelection.All
                                     }
-                                    loadData()
+                                    reloadFromCache()
                                 }.onFailure { err ->
                                     errorMessage = err.message
                                 }
@@ -1219,11 +1337,11 @@ fun DashboardScreen(
                         if (clean.isEmpty()) return@Button
                         folderToEdit = null
                         scope.launch {
-                            apiClient.renameFolder(folder.id, clean).onSuccess { updated ->
+                            repository.renameFolder(folder.id, clean).onSuccess { updated ->
                                 if ((folderSelection as? DashboardFolderSelection.FolderItem)?.folder?.id == folder.id) {
                                     folderSelection = DashboardFolderSelection.FolderItem(updated)
                                 }
-                                loadData()
+                                reloadFromCache()
                             }.onFailure { err ->
                                 errorMessage = err.message
                             }
@@ -1241,6 +1359,37 @@ fun DashboardScreen(
             }
         )
     }
+
+    // Logout Warning Dialog when offline changes are pending sync
+    if (showLogoutPendingWarning) {
+        AlertDialog(
+            onDismissRequest = { showLogoutPendingWarning = false },
+            title = { Text("Cambios pendientes de sincronizar", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "Tienes ${syncStatus.pendingCount} cambio(s) guardado(s) localmente sin conexi\u00f3n. " +
+                        "Se sincronizar\u00e1n autom\u00e1ticamente en cuanto vuelvas a iniciar sesi\u00f3n con esta cuenta y tengas red, " +
+                        "pero te recomendamos conectar antes de salir."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showLogoutPendingWarning = false
+                        onLogout()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ErrorRedDark)
+                ) {
+                    Text("Cerrar sesi\u00f3n", color = PureWhite)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutPendingWarning = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -1249,6 +1398,7 @@ private fun SwipeableNoteDashboardCard(
     folderName: String?,
     outgoingShares: List<NoteShareInfo>,
     isPinned: Boolean,
+    isPendingSync: Boolean,
     isSwipedOpen: Boolean,
     onSwipeOpenChanged: (Boolean) -> Unit,
     onTogglePin: () -> Unit,
@@ -1336,6 +1486,7 @@ private fun SwipeableNoteDashboardCard(
                 folderName = folderName,
                 outgoingShares = outgoingShares,
                 isPinned = isPinned,
+                isPendingSync = isPendingSync,
                 onClick = onClick
             )
         }
@@ -1348,6 +1499,7 @@ private fun NoteDashboardCard(
     folderName: String?,
     outgoingShares: List<NoteShareInfo>,
     isPinned: Boolean,
+    isPendingSync: Boolean,
     onClick: () -> Unit
 ) {
     val isSharedByMe = note.isOwner && outgoingShares.isNotEmpty()
@@ -1433,7 +1585,7 @@ private fun NoteDashboardCard(
                 overflow = TextOverflow.Ellipsis
             )
 
-            if (folderName != null || note.tags.isNotEmpty() || isSharedWithMe || isSharedByMe) {
+            if (folderName != null || note.tags.isNotEmpty() || isSharedWithMe || isSharedByMe || isPendingSync) {
                 Spacer(modifier = Modifier.height(10.dp))
                 Row(
                     modifier = Modifier
@@ -1442,6 +1594,29 @@ private fun NoteDashboardCard(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (isPendingSync) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(PureWhite.copy(alpha = 0.85f))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_cloud_sync),
+                                contentDescription = null,
+                                tint = RoyalBlue,
+                                modifier = Modifier.size(11.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Pendiente",
+                                color = RoyalBlue,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                     // 1. BADGE FOR NOTES SHARED WITH ME (incoming share)
                     if (isSharedWithMe) {
                         Row(

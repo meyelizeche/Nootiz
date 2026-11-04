@@ -14,6 +14,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
+import java.io.IOException
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
@@ -21,6 +22,18 @@ import java.net.URLEncoder
 import java.util.UUID
 
 class ApiException(val statusCode: Int, override val message: String) : Exception(message)
+
+fun Throwable.isOfflineOrUnreachable(): Boolean {
+    return when (this) {
+        is IOException -> true
+        is ApiException -> statusCode == 502 || statusCode == 503 || statusCode == 504
+        else -> cause?.isOfflineOrUnreachable() == true
+    }
+}
+
+fun Throwable.isUnauthorizedError(): Boolean {
+    return (this as? ApiException)?.statusCode == 401
+}
 
 class NotizApiClient(private val sessionPrefs: SessionPreferences) {
 
@@ -278,7 +291,7 @@ class NotizApiClient(private val sessionPrefs: SessionPreferences) {
                 doInput = true
                 doOutput = true
                 useCaches = false
-                connectTimeout = 15000
+                connectTimeout = 5000
                 readTimeout = 20000
                 setRequestProperty("Accept", "application/json")
                 setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
@@ -324,7 +337,7 @@ class NotizApiClient(private val sessionPrefs: SessionPreferences) {
                 val conn = (resolveUrl("/api/notes/$noteId/attachments/$attachmentId")
                     .openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
-                    connectTimeout = 10000
+                    connectTimeout = 5000
                     readTimeout = 15000
                     sessionPrefs.token?.let { setRequestProperty("Authorization", "Bearer $it") }
                 }
@@ -364,7 +377,7 @@ class NotizApiClient(private val sessionPrefs: SessionPreferences) {
         runCatching {
             val conn = (resolveUrl(path).openConnection() as HttpURLConnection).apply {
                 requestMethod = method
-                connectTimeout = 10000
+                connectTimeout = 4500
                 readTimeout = 12000
                 setRequestProperty("Accept", "application/json")
                 if (authRequired) {

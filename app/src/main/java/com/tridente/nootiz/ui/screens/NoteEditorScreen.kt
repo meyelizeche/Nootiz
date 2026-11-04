@@ -89,6 +89,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -123,6 +124,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tridente.nootiz.R
+import com.tridente.nootiz.data.local.LocalCacheStore
 import com.tridente.nootiz.data.local.SessionPreferences
 import com.tridente.nootiz.data.model.AttachmentMetadata
 import com.tridente.nootiz.data.model.Folder
@@ -130,7 +132,7 @@ import com.tridente.nootiz.data.model.Note
 import com.tridente.nootiz.data.model.NoteReminder
 import com.tridente.nootiz.data.model.NoteShareInfo
 import com.tridente.nootiz.data.model.User
-import com.tridente.nootiz.data.remote.NotizApiClient
+import com.tridente.nootiz.data.sync.NotizRepository
 import com.tridente.nootiz.ui.theme.ErrorRedDark
 import com.tridente.nootiz.ui.theme.IceBlueCard
 import com.tridente.nootiz.ui.theme.IceBlueChip
@@ -429,11 +431,14 @@ fun NoteEditorScreen(
     initialFolderId: String?,
     currentUser: User?,
     sessionPrefs: SessionPreferences,
-    apiClient: NotizApiClient,
+    repository: NotizRepository,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val syncStatus by repository.syncStatus.collectAsState()
+    val dataVersion by repository.dataVersion.collectAsState()
+    val remappedIds by repository.remappedIds.collectAsState()
 
     var currentNote by remember { mutableStateOf(initialNote) }
     var title by remember { mutableStateOf(initialNote?.title ?: "") }
@@ -476,8 +481,7 @@ fun NoteEditorScreen(
         mutableStateOf(initialNote?.id?.let { sessionPrefs.getReminderForNote(it) })
     }
 
-    // Last content known to be persisted on the server. A note is only saved (and thus bumped to the top
-    // of 'recientes') when its content differs from this baseline.
+    // Last content known to be persisted locally/remotely. A note is only saved when its content differs from this baseline.
     var lastSavedSnapshot by remember {
         mutableStateOf<NoteContentSnapshot?>(
             initialNote?.let {
@@ -508,31 +512,90 @@ fun NoteEditorScreen(
         }
     }
 
-    fun loadAttachments(noteId: String) {
-        scope.launch {
-            apiClient.getAttachments(noteId).onSuccess { list ->
-                attachments = list
-                list.forEach { meta ->
-                    if (!attachmentBitmaps.containsKey(meta.id)) {
-                        apiClient.downloadAttachmentBytes(noteId, meta.id).onSuccess { bytes ->
-                            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                            if (bmp != null) {
-                                attachmentBitmaps[meta.id] = bmp.asImageBitmap()
-                            }
-                        }
+    suspend fun loadAttachmentsFromCacheAndBitmaps(noteId: String) {
+        val list = repository.getCachedAttachments(noteId)
+        attachments = list
+        list.forEach { meta ->
+            if (!attachmentBitmaps.containsKey(meta.id)) {
+                repository.downloadAttachmentBytes(noteId, meta.id).onSuccess { bytes ->
+                    val bmp = withContext(Dispatchers.IO) {
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    }
+                    if (bmp != null) {
+                        attachmentBitmaps[meta.id] = bmp.asImageBitmap()
                     }
                 }
             }
         }
     }
 
-    LaunchedEffect(Unit) {
-        apiClient.getFolders().onSuccess { folders = it }
-        apiClient.getNotes().onSuccess { allNotes ->
-            allKnownTags = (allNotes.flatMap { it.tags } + tags).map { it.trim().lowercase() }.filter { it.isNotEmpty() }.distinct().sorted()
+    // Keep editor state seamlessly updated if background sync remaps local-note / local-folder / local-att IDs
+    LaunchedEffect(remappedIds, dataVersion) {
+        folders = repository.getCachedFolders()
+
+        val currentFolder = folderId
+        if (currentFolder != null) {
+            val mappedFolder = remappedIds[currentFolder]
+            if (mappedFolder != null && mappedFolder != currentFolder) {
+                folderId = mappedFolder
+                lastSavedSnapshot = lastSavedSnapshot?.let { snap ->
+                    if (snap.folderId == currentFolder) snap.copy(folderId = mappedFolder) else snap
+                }
+            }
         }
+
+        val existingNote = currentNote
+        if (existingNote != null) {
+            val mappedNoteId = remappedIds[existingNote.id]
+            if (mappedNoteId != null && mappedNoteId != existingNote.id) {
+                val syncedNote = repository.getCachedNote(mappedNoteId)
+                if (syncedNote != null) {
+                    currentNote = syncedNote
+                    activeReminder = sessionPrefs.getReminderForNote(mappedNoteId) ?: activeReminder
+                }
+            }
+
+            // Migrate decoded attachment bitmaps if local-att-* IDs were remapped to server UUIDs
+            remappedIds.forEach { (localId, remoteId) ->
+                if (localId.startsWith(LocalCacheStore.LOCAL_ATTACHMENT_PREFIX)) {
+                    val bmp = attachmentBitmaps.remove(localId)
+                    if (bmp != null && !attachmentBitmaps.containsKey(remoteId)) {
+                        attachmentBitmaps[remoteId] = bmp
+                    }
+                }
+            }
+
+            val activeId = currentNote?.id ?: existingNote.id
+            loadAttachmentsFromCacheAndBitmaps(activeId)
+            if (isOwner) {
+                sharesList = repository.getCachedNoteShares(activeId)
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        folders = repository.getCachedFolders()
+        val cachedNotes = repository.getCachedNotes()
+        allKnownTags = (cachedNotes.flatMap { it.tags } + tags)
+            .map { it.trim().lowercase() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .sorted()
+
         currentNote?.id?.let { id ->
-            apiClient.getNote(id).onSuccess { fresh ->
+            loadAttachmentsFromCacheAndBitmaps(id)
+            if (isOwner) {
+                sharesList = repository.getCachedNoteShares(id)
+            }
+
+            // Refresh from server in background without blocking offline usage
+            repository.refreshNoteDetailFromServer(id)
+
+            val resolvedId = repository.resolveId(id) ?: id
+            val fresh = repository.getCachedNote(resolvedId)
+            val currentSnap = NoteContentSnapshot(title.trim(), currentMarkdownBody(), tags, folderId)
+            val userDidNotTypeYet = currentSnap == lastSavedSnapshot
+            if (fresh != null && userDidNotTypeYet) {
                 currentNote = fresh
                 title = fresh.title
                 tags = fresh.tags
@@ -549,7 +612,10 @@ fun NoteEditorScreen(
                     focusedBlockIndex = (textBlocks.size - 1).coerceAtLeast(0)
                 }
             }
-            loadAttachments(id)
+            loadAttachmentsFromCacheAndBitmaps(resolvedId)
+            if (isOwner) {
+                sharesList = repository.getCachedNoteShares(resolvedId)
+            }
         }
     }
 
@@ -564,14 +630,14 @@ fun NoteEditorScreen(
         isSaving = true
         errorMessage = null
         val result = if (existing == null) {
-            apiClient.createNote(
+            repository.createNote(
                 title = effectiveTitle,
                 body = serializedBody,
                 tags = tags,
                 folderId = folderId
             )
         } else {
-            apiClient.updateNote(
+            repository.updateNote(
                 noteId = existing.id,
                 title = effectiveTitle,
                 body = serializedBody,
@@ -583,12 +649,16 @@ fun NoteEditorScreen(
         isSaving = false
         return result.fold(
             onSuccess = { saved ->
-                lastSavedSnapshot = snapshotToSave
+                lastSavedSnapshot = snapshotToSave.copy(folderId = saved.folderId)
                 currentNote = saved
                 title = saved.title
                 tags = saved.tags
                 folderId = saved.folderId
-                if (!silent) showToastBanner("Nota guardada")
+                if (!silent) {
+                    showToastBanner(
+                        if (syncStatus.isOnline) "Nota guardada" else "Guardada en cach\u00e9 local"
+                    )
+                }
                 saved
             },
             onFailure = { err ->
@@ -622,7 +692,7 @@ fun NoteEditorScreen(
         saveNoteInternal(silent = true)
     }
 
-    // Image Picker Launcher for BLOB Upload (POST /api/notes/{id}/attachments)
+    // Image Picker Launcher for BLOB Upload (Offline-first: stores locally + queues POST /api/notes/{id}/attachments)
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -635,9 +705,11 @@ fun NoteEditorScreen(
                 val contentResolver = context.contentResolver
                 val mimeType = contentResolver.getType(uri) ?: "image/png"
                 val fileName = queryFileName(context, uri) ?: "imagen_${System.currentTimeMillis()}.png"
-                val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                val bytes = withContext(Dispatchers.IO) {
+                    contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                }
                 if (bytes != null) {
-                    val uploadRes = apiClient.uploadAttachment(
+                    val uploadRes = repository.uploadAttachment(
                         noteId = ensuredNote.id,
                         filename = fileName,
                         contentType = mimeType,
@@ -645,11 +717,19 @@ fun NoteEditorScreen(
                     )
                     uploadRes.onSuccess { meta ->
                         attachments = attachments + meta
-                        val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        val bmp = withContext(Dispatchers.IO) {
+                            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        }
                         if (bmp != null) {
                             attachmentBitmaps[meta.id] = bmp.asImageBitmap()
                         }
-                        showToastBanner("Imagen adjuntada")
+                        showToastBanner(
+                            if (syncStatus.isOnline) {
+                                "Imagen adjuntada"
+                            } else {
+                                "Imagen guardada offline (se subir\u00e1 al conectar)"
+                            }
+                        )
                     }.onFailure { err ->
                         errorMessage = err.message ?: "Error al subir imagen"
                     }
@@ -964,8 +1044,10 @@ fun NoteEditorScreen(
                                     currentNote
                                 }
                                 if (ensured != null && isOwner) {
-                                    apiClient.getNoteShares(ensured.id).onSuccess {
-                                        sharesList = it
+                                    sharesList = repository.getCachedNoteShares(ensured.id)
+                                    launch {
+                                        repository.refreshNoteDetailFromServer(ensured.id)
+                                        sharesList = repository.getCachedNoteShares(ensured.id)
                                     }
                                 }
                                 showShareSheet = true
@@ -991,11 +1073,11 @@ fun NoteEditorScreen(
                                 val noteId = currentNote?.id ?: return@IconButton
                                 scope.launch {
                                     if (isOwner) {
-                                        apiClient.deleteNote(noteId).onSuccess { onBack() }
+                                        repository.deleteNote(noteId).onSuccess { onBack() }
                                             .onFailure { errorMessage = it.message }
                                     } else {
                                         val myId = currentUser?.id ?: return@launch
-                                        apiClient.revokeNoteShare(noteId, myId).onSuccess { onBack() }
+                                        repository.revokeNoteShare(noteId, myId).onSuccess { onBack() }
                                             .onFailure { errorMessage = it.message }
                                     }
                                 }
@@ -1063,13 +1145,48 @@ fun NoteEditorScreen(
 
                 Spacer(modifier = Modifier.width(12.dp))
 
-                Text(
-                    text = formatNoteTime(currentNote?.updatedAt?.ifBlank { currentNote?.createdAt ?: "" } ?: ""),
-                    color = TextSecondarySlate,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(top = 6.dp)
-                )
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = formatNoteTime(currentNote?.updatedAt?.ifBlank { currentNote?.createdAt ?: "" } ?: ""),
+                        color = TextSecondarySlate,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
+                    val noteIsPending = currentNote?.id?.let { id ->
+                        syncStatus.pendingNoteIds.contains(id) || LocalCacheStore.isLocalId(id)
+                    } == true
+                    if (!syncStatus.isOnline || noteIsPending) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(if (!syncStatus.isOnline) NavyToast else IceBlueChip)
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(
+                                    id = if (!syncStatus.isOnline) R.drawable.ic_cloud_off else R.drawable.ic_cloud_sync
+                                ),
+                                contentDescription = null,
+                                tint = if (!syncStatus.isOnline) LimeAccent else RoyalBlue,
+                                modifier = Modifier.size(11.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = when {
+                                    !syncStatus.isOnline -> "Local \u2022 Offline"
+                                    syncStatus.isSyncing -> "Sincronizando"
+                                    else -> "Pendiente"
+                                },
+                                color = if (!syncStatus.isOnline) PureWhite else RoyalBlue,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -1518,7 +1635,7 @@ fun NoteEditorScreen(
                                             onClick = {
                                                 val noteId = currentNote?.id ?: return@IconButton
                                                 scope.launch {
-                                                    apiClient.deleteAttachment(noteId, att.id).onSuccess {
+                                                    repository.deleteAttachment(noteId, att.id).onSuccess {
                                                         attachments = attachments.filterNot { it.id == att.id }
                                                         attachmentBitmaps.remove(att.id)
                                                         showToastBanner("Imagen eliminada")
@@ -1779,18 +1896,25 @@ fun NoteEditorScreen(
                             isSharing = true
                             shareError = null
                             scope.launch {
-                                val res = apiClient.shareNote(
+                                val res = repository.shareNote(
                                     noteId = noteId,
                                     recipient = recipientInput.trim(),
                                     permission = selectedPermission
                                 )
                                 isSharing = false
-                                res.onSuccess { info ->
+                                res.onSuccess { outcome ->
+                                    val info = outcome.shareInfo
                                     sharesList = sharesList.filterNot {
                                         it.sharedWithUserId == info.sharedWithUserId
                                     } + info
                                     recipientInput = ""
-                                    showToastBanner("Nota compartida")
+                                    showToastBanner(
+                                        if (outcome.queuedOffline) {
+                                            "Compartici\u00f3n en cola (se enviar\u00e1 al conectar)"
+                                        } else {
+                                            "Nota compartida"
+                                        }
+                                    )
                                 }.onFailure { err ->
                                     shareError = err.message ?: "No se pudo compartir la nota"
                                 }
@@ -1899,10 +2023,11 @@ fun NoteEditorScreen(
                                                 roleMenuExpanded = false
                                                 if (share.permission != "read") {
                                                     val noteId = currentNote?.id ?: return@DropdownMenuItem
+                                                    val targetRecipient = if (share.email.contains("@")) share.email else share.username
                                                     scope.launch {
-                                                        apiClient.shareNote(noteId, share.email, "read").onSuccess { updated ->
+                                                        repository.shareNote(noteId, targetRecipient, "read").onSuccess { outcome ->
                                                             sharesList = sharesList.map {
-                                                                if (it.sharedWithUserId == share.sharedWithUserId) updated else it
+                                                                if (it.sharedWithUserId == share.sharedWithUserId) outcome.shareInfo else it
                                                             }
                                                             showToastBanner("${share.username} ahora es Lector")
                                                         }
@@ -1934,10 +2059,11 @@ fun NoteEditorScreen(
                                                 roleMenuExpanded = false
                                                 if (share.permission != "edit") {
                                                     val noteId = currentNote?.id ?: return@DropdownMenuItem
+                                                    val targetRecipient = if (share.email.contains("@")) share.email else share.username
                                                     scope.launch {
-                                                        apiClient.shareNote(noteId, share.email, "edit").onSuccess { updated ->
+                                                        repository.shareNote(noteId, targetRecipient, "edit").onSuccess { outcome ->
                                                             sharesList = sharesList.map {
-                                                                if (it.sharedWithUserId == share.sharedWithUserId) updated else it
+                                                                if (it.sharedWithUserId == share.sharedWithUserId) outcome.shareInfo else it
                                                             }
                                                             showToastBanner("${share.username} ahora es Editor")
                                                         }
@@ -1966,7 +2092,7 @@ fun NoteEditorScreen(
                                                 roleMenuExpanded = false
                                                 val noteId = currentNote?.id ?: return@DropdownMenuItem
                                                 scope.launch {
-                                                    apiClient.revokeNoteShare(noteId, share.sharedWithUserId).onSuccess {
+                                                    repository.revokeNoteShare(noteId, share.sharedWithUserId).onSuccess {
                                                         sharesList = sharesList.filterNot {
                                                             it.sharedWithUserId == share.sharedWithUserId
                                                         }
@@ -2379,25 +2505,28 @@ fun NoteEditorScreen(
                 // Lime Green CTA "Guardar recordatorio" (matching Image 4)
                 Button(
                     onClick = {
-                        val noteId = currentNote?.id ?: "temp"
-                        val rem = NoteReminder(
-                            noteId = noteId,
-                            noteTitle = title.ifBlank { "Ideas para el lunes" },
-                            year = displayedYearMonth.year,
-                            month = displayedYearMonth.monthValue,
-                            dayOfMonth = selectedDay,
-                            hour = selectedHour,
-                            minute = selectedMinute,
-                            localAlert = localAlertChecked,
-                            googleCalendar = googleCalendarChecked
-                        )
-                        sessionPrefs.saveReminder(rem)
-                        activeReminder = rem
-                        showReminderSheet = false
-                        showToastBanner("Recordatorio guardado")
+                        scope.launch {
+                            val ensured = currentNote ?: saveNoteInternal(silent = true)
+                            val noteId = ensured?.id ?: "temp"
+                            val rem = NoteReminder(
+                                noteId = noteId,
+                                noteTitle = title.ifBlank { "Ideas para el lunes" },
+                                year = displayedYearMonth.year,
+                                month = displayedYearMonth.monthValue,
+                                dayOfMonth = selectedDay,
+                                hour = selectedHour,
+                                minute = selectedMinute,
+                                localAlert = localAlertChecked,
+                                googleCalendar = googleCalendarChecked
+                            )
+                            sessionPrefs.saveReminder(rem)
+                            activeReminder = rem
+                            showReminderSheet = false
+                            showToastBanner("Recordatorio guardado")
 
-                        if (googleCalendarChecked) {
-                            openGoogleCalendarIntent(context, rem, currentMarkdownBody())
+                            if (googleCalendarChecked) {
+                                openGoogleCalendarIntent(context, rem, currentMarkdownBody())
+                            }
                         }
                     },
                     shape = RoundedCornerShape(50),
