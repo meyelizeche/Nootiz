@@ -1,4 +1,4 @@
-package com.tridente.nootiz
+package com.fumoctl.notiz
 
 import org.junit.Test
 

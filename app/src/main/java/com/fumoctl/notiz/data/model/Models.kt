@@ -1,4 +1,4 @@
-package com.tridente.nootiz.data.model
+package com.fumoctl.notiz.data.model
 
 data class User(
     val id: String,

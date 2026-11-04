@@ -1,9 +1,9 @@
-package com.tridente.nootiz.data.local
+package com.fumoctl.notiz.data.local
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.tridente.nootiz.data.model.NoteReminder
-import com.tridente.nootiz.data.model.User
+import com.fumoctl.notiz.data.model.NoteReminder
+import com.fumoctl.notiz.data.model.User
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -34,7 +34,7 @@ class SessionPreferences(context: Context) {
     private var cachedPinnedNoteIds: List<String> = emptyList()
 
     companion object {
-        private const val PREFS_NAME = "nootiz_session_prefs"
+        private const val PREFS_NAME = "notiz_session_prefs"
         private const val KEY_BASE_URL = "base_url"
         private const val KEY_JWT_TOKEN = "jwt_token"
         private const val KEY_USER_JSON = "user_json"

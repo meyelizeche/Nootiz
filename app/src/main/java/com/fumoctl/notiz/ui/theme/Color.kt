@@ -1,4 +1,4 @@
-package com.tridente.nootiz.ui.theme
+package com.fumoctl.notiz.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

@@ -1,14 +1,14 @@
-package com.tridente.nootiz.data.local
+package com.fumoctl.notiz.data.local
 
 import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.LruCache
-import com.tridente.nootiz.data.model.AttachmentMetadata
-import com.tridente.nootiz.data.model.Folder
-import com.tridente.nootiz.data.model.Note
-import com.tridente.nootiz.data.model.NoteShareInfo
+import com.fumoctl.notiz.data.model.AttachmentMetadata
+import com.fumoctl.notiz.data.model.Folder
+import com.fumoctl.notiz.data.model.Note
+import com.fumoctl.notiz.data.model.NoteShareInfo
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -61,7 +61,7 @@ class LocalCacheStore(context: Context) {
     }
 
     companion object {
-        private const val DB_NAME = "nootiz_offline_cache.db"
+        private const val DB_NAME = "notiz_offline_cache.db"
         private const val DB_VERSION = 1
 
         const val LOCAL_FOLDER_PREFIX = "local-folder-"

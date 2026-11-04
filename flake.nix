@@ -1,5 +1,5 @@
 {
-  description = "Nootiz Android Client development environment";
+  description = "Notiz Android Client development environment";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";

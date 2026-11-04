@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.tridente.nootiz"
+    namespace = "com.fumoctl.notiz"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -12,7 +12,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.tridente.nootiz"
+        applicationId = "com.fumoctl.notiz"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

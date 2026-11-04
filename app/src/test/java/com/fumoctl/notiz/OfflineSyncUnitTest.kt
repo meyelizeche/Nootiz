@@ -1,10 +1,10 @@
-package com.tridente.nootiz
+package com.fumoctl.notiz
 
-import com.tridente.nootiz.data.local.LocalCacheStore
-import com.tridente.nootiz.data.local.SessionPreferences
-import com.tridente.nootiz.data.remote.ApiException
-import com.tridente.nootiz.data.remote.isOfflineOrUnreachable
-import com.tridente.nootiz.data.remote.isUnauthorizedError
+import com.fumoctl.notiz.data.local.LocalCacheStore
+import com.fumoctl.notiz.data.local.SessionPreferences
+import com.fumoctl.notiz.data.remote.ApiException
+import com.fumoctl.notiz.data.remote.isOfflineOrUnreachable
+import com.fumoctl.notiz.data.remote.isUnauthorizedError
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

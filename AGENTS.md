@@ -1,12 +1,12 @@
-# AGENTS.md — Nootiz Android Client (`com.tridente.nootiz`)
+# AGENTS.md — Notiz Android Client (`com.fumoctl.notiz`)
 
-Este documento es la guía de referencia técnica, arquitectónica y de mantenimiento para agentes de IA y desarrolladores que trabajen en **Nootiz**, la aplicación nativa de Android para el backend colaborativo de notas en Markdown [`notiz-back-api`](https://github.com/fumoctl/notiz-back-api).
+Este documento es la guía de referencia técnica, arquitectónica y de mantenimiento para agentes de IA y desarrolladores que trabajen en **Notiz**, la aplicación nativa de Android para el backend colaborativo de notas en Markdown [`notiz-back-api`](https://github.com/fumoctl/notiz-back-api).
 
 ---
 
 ## 1. Visión General del Proyecto
 
-- **Nombre del paquete**: `com.tridente.nootiz`
+- **Nombre del paquete**: `com.fumoctl.notiz`
 - **Lenguaje y UI**: Kotlin + Jetpack Compose (Material 3)
 - **SDK**: `minSdk = 26` (Android 8.0), `targetSdk = 36`, `compileSdk = 36.1`
 - **Backend objetivo**: `notiz-back-api` (Rust / Axum / SQLite, puerto por defecto `3000`).
@@ -19,7 +19,7 @@ Este documento es la guía de referencia técnica, arquitectónica y de mantenim
 ```text
 app/src/main/
 ├── AndroidManifest.xml
-├── java/com/tridente/nootiz/
+├── java/com/fumoctl/notiz/
 │   ├── MainActivity.kt                  # Punto de entrada y máquina de estados de navegación
 │   ├── data/
 │   │   ├── local/
@@ -34,7 +34,7 @@ app/src/main/
 │       │   ├── DashboardScreen.kt       # Lista de notas, buscador, filtros por carpeta/etiqueta/compartidas
 │       │   └── NoteEditorScreen.kt      # Editor Markdown, checklist interactivo, imágenes BLOB, compartir y calendario
 │       └── theme/
-│           ├── Color.kt                 # Paleta de colores oficial de Nootiz
+│           ├── Color.kt                 # Paleta de colores oficial de Notiz
 │           ├── Theme.kt                 # Configuración MaterialTheme y StatusBar
 │           └── Type.kt                  # Jerarquía tipográfica
 └── res/

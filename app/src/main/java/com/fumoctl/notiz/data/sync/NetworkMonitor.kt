@@ -1,4 +1,4 @@
-package com.tridente.nootiz.data.sync
+package com.fumoctl.notiz.data.sync
 
 import android.content.Context
 import android.net.ConnectivityManager

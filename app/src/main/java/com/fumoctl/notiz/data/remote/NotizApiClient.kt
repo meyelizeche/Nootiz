@@ -1,13 +1,13 @@
-package com.tridente.nootiz.data.remote
+package com.fumoctl.notiz.data.remote
 
 import android.util.LruCache
-import com.tridente.nootiz.data.local.SessionPreferences
-import com.tridente.nootiz.data.model.AttachmentMetadata
-import com.tridente.nootiz.data.model.AuthResponse
-import com.tridente.nootiz.data.model.Folder
-import com.tridente.nootiz.data.model.Note
-import com.tridente.nootiz.data.model.NoteShareInfo
-import com.tridente.nootiz.data.model.User
+import com.fumoctl.notiz.data.local.SessionPreferences
+import com.fumoctl.notiz.data.model.AttachmentMetadata
+import com.fumoctl.notiz.data.model.AuthResponse
+import com.fumoctl.notiz.data.model.Folder
+import com.fumoctl.notiz.data.model.Note
+import com.fumoctl.notiz.data.model.NoteShareInfo
+import com.fumoctl.notiz.data.model.User
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -281,7 +281,7 @@ class NotizApiClient(private val sessionPrefs: SessionPreferences) {
         bytes: ByteArray
     ): Result<AttachmentMetadata> = withContext(Dispatchers.IO) {
         runCatching {
-            val boundary = "----NootizBoundary" + UUID.randomUUID().toString().replace("-", "")
+            val boundary = "----NotizBoundary" + UUID.randomUUID().toString().replace("-", "")
             val lineEnd = "\r\n"
             val twoHyphens = "--"
             val safeFilename = filename.replace("\"", "_")

@@ -1,4 +1,4 @@
-package com.tridente.nootiz.ui.screens
+package com.fumoctl.notiz.ui.screens
 
 import android.content.Context
 import android.content.Intent
@@ -123,27 +123,27 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.tridente.nootiz.R
-import com.tridente.nootiz.data.local.LocalCacheStore
-import com.tridente.nootiz.data.local.SessionPreferences
-import com.tridente.nootiz.data.model.AttachmentMetadata
-import com.tridente.nootiz.data.model.Folder
-import com.tridente.nootiz.data.model.Note
-import com.tridente.nootiz.data.model.NoteReminder
-import com.tridente.nootiz.data.model.NoteShareInfo
-import com.tridente.nootiz.data.model.User
-import com.tridente.nootiz.data.sync.NotizRepository
-import com.tridente.nootiz.ui.theme.ErrorRedDark
-import com.tridente.nootiz.ui.theme.IceBlueCard
-import com.tridente.nootiz.ui.theme.IceBlueChip
-import com.tridente.nootiz.ui.theme.IceBlueSurface
-import com.tridente.nootiz.ui.theme.LimeAccent
-import com.tridente.nootiz.ui.theme.NavyToast
-import com.tridente.nootiz.ui.theme.OffWhiteBackground
-import com.tridente.nootiz.ui.theme.PureWhite
-import com.tridente.nootiz.ui.theme.RoyalBlue
-import com.tridente.nootiz.ui.theme.TextPrimaryNavy
-import com.tridente.nootiz.ui.theme.TextSecondarySlate
+import com.fumoctl.notiz.R
+import com.fumoctl.notiz.data.local.LocalCacheStore
+import com.fumoctl.notiz.data.local.SessionPreferences
+import com.fumoctl.notiz.data.model.AttachmentMetadata
+import com.fumoctl.notiz.data.model.Folder
+import com.fumoctl.notiz.data.model.Note
+import com.fumoctl.notiz.data.model.NoteReminder
+import com.fumoctl.notiz.data.model.NoteShareInfo
+import com.fumoctl.notiz.data.model.User
+import com.fumoctl.notiz.data.sync.NotizRepository
+import com.fumoctl.notiz.ui.theme.ErrorRedDark
+import com.fumoctl.notiz.ui.theme.IceBlueCard
+import com.fumoctl.notiz.ui.theme.IceBlueChip
+import com.fumoctl.notiz.ui.theme.IceBlueSurface
+import com.fumoctl.notiz.ui.theme.LimeAccent
+import com.fumoctl.notiz.ui.theme.NavyToast
+import com.fumoctl.notiz.ui.theme.OffWhiteBackground
+import com.fumoctl.notiz.ui.theme.PureWhite
+import com.fumoctl.notiz.ui.theme.RoyalBlue
+import com.fumoctl.notiz.ui.theme.TextPrimaryNavy
+import com.fumoctl.notiz.ui.theme.TextSecondarySlate
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -793,7 +793,7 @@ fun NoteEditorScreen(
         if (targetUri == null) return@rememberLauncherForActivityResult
         isExportingPdf = true
         scope.launch {
-            val exportTitle = title.trim().ifBlank { "Nota de Nootiz" }
+            val exportTitle = title.trim().ifBlank { "Nota de Notiz" }
             val exportTime = formatNoteTime(currentNote?.updatedAt?.ifBlank { currentNote?.createdAt ?: "" } ?: "")
             val exportBlocks = textBlocks.toList()
             val exportImages = attachments.mapNotNull { attachmentBitmaps[it.id] }
@@ -2123,7 +2123,7 @@ fun NoteEditorScreen(
                 Button(
                     onClick = {
                         val safeChars = title.trim().filter { it.isLetterOrDigit() || it == ' ' || it == '_' || it == '-' }
-                        val cleanName = safeChars.trim().replace(' ', '_').ifBlank { "nota_nootiz" }
+                        val cleanName = safeChars.trim().replace(' ', '_').ifBlank { "nota_notiz" }
                         pdfExportLauncher.launch("$cleanName.pdf")
                     },
                     enabled = !isExportingPdf,

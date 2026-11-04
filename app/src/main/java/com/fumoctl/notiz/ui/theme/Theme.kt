@@ -1,10 +1,10 @@
-package com.tridente.nootiz.ui.theme
+package com.fumoctl.notiz.ui.theme
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 
-private val NootizColorScheme = lightColorScheme(
+private val NotizColorScheme = lightColorScheme(
     primary = RoyalBlue,
     onPrimary = PureWhite,
     secondary = SkyBlueCard,
@@ -20,11 +20,11 @@ private val NootizColorScheme = lightColorScheme(
 )
 
 @Composable
-fun NootizTheme(
+fun NotizTheme(
     content: @Composable () -> Unit
 ) {
     MaterialTheme(
-        colorScheme = NootizColorScheme,
+        colorScheme = NotizColorScheme,
         typography = Typography,
         content = content
     )

@@ -1,4 +1,4 @@
-package com.tridente.nootiz
+package com.fumoctl.notiz
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -15,16 +15,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
-import com.tridente.nootiz.data.local.SessionPreferences
-import com.tridente.nootiz.data.model.Note
-import com.tridente.nootiz.data.model.User
-import com.tridente.nootiz.data.remote.NotizApiClient
-import com.tridente.nootiz.data.remote.isUnauthorizedError
-import com.tridente.nootiz.data.sync.NotizRepository
-import com.tridente.nootiz.ui.screens.AuthScreen
-import com.tridente.nootiz.ui.screens.DashboardScreen
-import com.tridente.nootiz.ui.screens.NoteEditorScreen
-import com.tridente.nootiz.ui.theme.NootizTheme
+import com.fumoctl.notiz.data.local.SessionPreferences
+import com.fumoctl.notiz.data.model.Note
+import com.fumoctl.notiz.data.model.User
+import com.fumoctl.notiz.data.remote.NotizApiClient
+import com.fumoctl.notiz.data.remote.isUnauthorizedError
+import com.fumoctl.notiz.data.sync.NotizRepository
+import com.fumoctl.notiz.ui.screens.AuthScreen
+import com.fumoctl.notiz.ui.screens.DashboardScreen
+import com.fumoctl.notiz.ui.screens.NoteEditorScreen
+import com.fumoctl.notiz.ui.theme.NotizTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -38,15 +38,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            NootizTheme {
-                NootizApp()
+            NotizTheme {
+                NotizApp()
             }
         }
     }
 }
 
 @Composable
-fun NootizApp() {
+fun NotizApp() {
     val context = LocalContext.current
     val sessionPrefs = remember { SessionPreferences(context) }
     val apiClient = remember { NotizApiClient(sessionPrefs) }
