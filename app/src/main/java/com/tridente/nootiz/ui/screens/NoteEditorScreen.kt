@@ -28,6 +28,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -701,7 +706,8 @@ fun NoteEditorScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                    .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Dark Navy Confirmation Toast ("Nota compartida" matching Image 2 & Image 4)
@@ -742,18 +748,17 @@ fun NoteEditorScreen(
                 // Bottom Formatting Bar: T\u00edtulo, Subt\u00edtulo, Texto, Task Check Icon, IMG
                 Surface(
                     color = PureWhite,
-                    shape = RoundedCornerShape(22.dp),
+                    shape = RoundedCornerShape(18.dp),
                     shadowElevation = 4.dp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, IceBlueCard, RoundedCornerShape(22.dp))
+                        .border(1.dp, IceBlueCard, RoundedCornerShape(18.dp))
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // T\u00edtulo button
@@ -761,7 +766,8 @@ fun NoteEditorScreen(
                             text = "T\u00edtulo",
                             active = activeBlockType == TextBlockType.TITULO,
                             enabled = canEdit,
-                            onClick = { applyBlockType(TextBlockType.TITULO) }
+                            onClick = { applyBlockType(TextBlockType.TITULO) },
+                            modifier = Modifier.weight(1f)
                         )
 
                         // Subt\u00edtulo button
@@ -769,7 +775,8 @@ fun NoteEditorScreen(
                             text = "Subt\u00edtulo",
                             active = activeBlockType == TextBlockType.SUBTITULO,
                             enabled = canEdit,
-                            onClick = { applyBlockType(TextBlockType.SUBTITULO) }
+                            onClick = { applyBlockType(TextBlockType.SUBTITULO) },
+                            modifier = Modifier.weight(1.3f)
                         )
 
                         // Texto button (normal text - default)
@@ -777,7 +784,8 @@ fun NoteEditorScreen(
                             text = "Texto",
                             active = activeBlockType == TextBlockType.TEXTO,
                             enabled = canEdit,
-                            onClick = { applyBlockType(TextBlockType.TEXTO) }
+                            onClick = { applyBlockType(TextBlockType.TEXTO) },
+                            modifier = Modifier.weight(1f)
                         )
 
                         // Inline check toggle button (using custom ic_task_check from reference image)
@@ -785,15 +793,15 @@ fun NoteEditorScreen(
                             onClick = { toggleBlockCheckbox() },
                             enabled = canEdit,
                             modifier = Modifier
-                                .size(38.dp)
-                                .clip(RoundedCornerShape(12.dp))
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(10.dp))
                                 .background(if (activeHasCheckbox) RoyalBlue else IceBlueSurface)
                         ) {
                             Icon(
                                 painter = painterResource(id = R.drawable.ic_task_check),
                                 contentDescription = "Alternar casilla de verificaci\u00f3n en el texto",
                                 tint = if (activeHasCheckbox) PureWhite else RoyalBlue,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                         }
 
@@ -802,7 +810,8 @@ fun NoteEditorScreen(
                             text = "IMG",
                             active = false,
                             enabled = canEdit && !isUploadingImage,
-                            onClick = { imagePickerLauncher.launch("image/*") }
+                            onClick = { imagePickerLauncher.launch("image/*") },
+                            modifier = Modifier.weight(0.9f)
                         )
                     }
                 }
@@ -2265,22 +2274,24 @@ private fun EditorToolPill(
     text: String,
     active: Boolean,
     enabled: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = Modifier
-            .height(38.dp)
-            .clip(RoundedCornerShape(12.dp))
+        modifier = modifier
+            .height(34.dp)
+            .clip(RoundedCornerShape(10.dp))
             .background(if (active) RoyalBlue else IceBlueSurface)
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 14.dp),
+            .padding(horizontal = 6.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = text,
             color = if (active) PureWhite else TextPrimaryNavy,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1
         )
     }
 }
